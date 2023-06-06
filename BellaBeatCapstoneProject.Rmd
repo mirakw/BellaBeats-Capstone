@@ -1,0 +1,292 @@
+---
+title: "BellaBeat Capstone Project"
+author: "Mira Wadehra"
+date: "5/31/2022"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+A clear summary of the business task
+I will be analyzing the activity and sleep of Fitbit user's and use this analysis to provide recommendations for the Bellabeat 'Time' device, a watch that tracks activity and sleep. I will find patterns in consumer behavior and preferences, including general physical fitness and sleep habits of consumers. My findings will be used to better understand Bellabeat customers and inform Bellabeat's marketing strategy for the 'Time' device.
+
+About the dataset:
+The data source used for the case study is FitBit Fitness Tracker Data and contains tracking datafrom 30 consenting FitBit users, including physical activity, heart rate, and sleep monitoring. 
+- activity_daily dataset describes each users daily entry of the number of steps, calories, distance, activity level distance and activity level minutes per day. 
+- sleep_daily dataset decribes the number of minutes asleep and in bed per user per day
+
+load packages
+```{r }
+library(tidyverse)
+library(dbplyr)
+library(lubridate)
+library(skimr)
+library(janitor)
+library(ggrepel)
+library(ggpubr)
+library(ggplot2)
+```
+
+load datasets
+```{r }
+activity_daily <- read.csv("BellabeatDatasets/dailyActivity_merged.csv")
+```
+
+```{r }
+sleep_daily <- read.csv("BellabeatDatasets/sleepDay_merged.csv")
+```
+
+
+Explore Data
+```{r }
+head(activity_daily)
+```
+
+```{r }
+head(sleep_daily)
+```
+
+
+Clean and Manipulate Datasets
+
+how many id's are there in each dataset? 
+In the activity dataset there are 33 people
+```{r }
+n_distinct(activity_daily$Id)
+```
+
+In the sleep dataset there are 24 people
+```{r }
+n_distinct(sleep_daily$Id)
+```
+
+Are there any duplicates in either one of the datasets?  
+There are 3 duplicates in the sleep, but none in the activity dataset
+```{r }
+sum(duplicated(activity_daily))
+```
+
+```{r }
+sum(duplicated(sleep_daily))
+```
+
+Remove the duplicates and N/A's from sleep dataset
+```{r }
+sleep_daily <- sleep_daily %>% distinct() %>% drop_na()
+```
+
+  
+Remove the N/A's from activity dataset, don't need to use distinct since there are not any duplicates
+```{r }
+activity_daily <- activity_daily %>%  drop_na() 
+```
+
+
+dimensions for activity dataset: 940 rows and 15 columns
+```{r }
+dim(activity_daily)
+```
+
+dimensions for sleep dataset: 410 rows and 5 columns
+```{r }
+dim(sleep_daily)
+```
+
+rename Date to Activity Date and change date format
+```{r }
+activity_daily <- activity_daily %>% 
+  rename("Date" = "ActivityDate") %>% 
+  mutate(Date = as.Date(Date, format = '%m/%d/%Y'))
+
+```
+
+```{r }
+head(activity_daily)
+```
+
+
+rename SleepDay to Date and chnage data format
+```{r }
+sleep_daily <- sleep_daily %>% rename("Date" = "SleepDay") %>%
+  mutate(Date = as.Date(Date,format ='%m/%d/%Y'))
+```
+
+
+```{r}
+head(sleep_daily)
+```
+
+
+Merge Datasets
+```{r}
+daily_activity_and_sleep <- merge(activity_daily, sleep_daily, c("Id","Date"))
+```
+
+find mean daily steps, calroies, minutes asleep, and minutes time ine bed per ID
+```{r }
+daily_average <- daily_activity_and_sleep %>%
+  group_by(Id) %>%
+  summarise (mean_daily_TotalSteps = mean(TotalSteps), 
+             mean_daily_Calories = mean(Calories), 
+             mean_daily_TotalMinutesAsleep = mean(TotalMinutesAsleep),
+             mean_daily_TotalTimeInBed = mean(TotalTimeInBed))
+```
+
+```{r }
+head(daily_average)
+```
+
+
+creating a data frame for the Total mean distance and the mean distances for each actvity level
+```{r }
+mean_distance_daily <- daily_activity_and_sleep %>% 
+  group_by(Id) %>% summarise(mean_daily_distance = mean(TotalDistance),
+                             mean_daily_VeryActiveDistance = mean(VeryActiveDistance),
+                             mean_daily_VeryActiveMinutes = mean(VeryActiveMinutes),
+                             mean_daily_ModeratelyActiveDistance = mean(ModeratelyActiveDistance),
+                             mean_daily_FairlyActiveMinutes = mean(FairlyActiveMinutes),
+                             mean_daily_LightActiveDistance = mean(LightActiveDistance),
+                             mean_daily_LightlyActiveMinutes = mean(LightlyActiveMinutes),
+                             mean_daily_SedentaryActiveDistance = mean(SedentaryActiveDistance),
+                             mean_daily_SedentaryMinutes = mean(SedentaryMinutes))
+```
+
+
+```{r }
+glimpse(mean_distance_daily) 
+```
+
+creating a daframe for the steps and what actvity level the user was at on average based on the average number of steps
+```{r }
+steps_df <- activity_daily %>%
+  filter(TotalSteps > 0) %>%
+  group_by(Id) %>%
+  summarize(sum_steps = sum(TotalSteps),
+            avg_steps = mean(TotalSteps),
+            number_of_entries = length(TotalSteps))
+```
+
+```{r }
+steps_df$activity_level = case_when(
+  steps_df$avg_steps >= 10000 ~ "Very Active",
+  steps_df$avg_steps >= 8000 ~ "Active", 
+  steps_df$avg_steps >= 5000 ~ "Moderate Active",
+  steps_df$avg_steps < 5000 ~ "Light Active",
+  steps_df$avg_steps < 2500 ~ "Sedentary")
+```
+
+```{r }
+glimpse(steps_df)
+```
+
+creating a DF for the percentages of each activity level 
+the percentage amount of how often each activity level was logged)
+```{r }
+activity_level_percent<- steps_df %>% 
+  group_by(activity_level) %>% 
+  summarise(users1 = n_distinct(Id)) %>% 
+  mutate(percent = users1/sum(users1) * 100) %>%
+  arrange(percent) %>% 
+  mutate(percent = round(percent, digits = 0))
+```
+
+```{r }
+head(activity_level_percent)
+```
+
+A Summary of your Analysis
+The analysis of the dataset should that only 24 users logged on to track both their steps/active and sleep.
+The other 9 users only logged on to track their steps. Since 9 users didn't log on to track their sleep, our data is slightly inaccurate.We also do not know the sex of the users. Since Bellabeat is exclusively for girls and women and we don't know the Fitbit user's sex, not all of this data will be help or accurate to help improve Bellabeat. Some of this data might be misleading. Next time Bellabeat should you their own dataset.
+The results and insights will be more accuarte and helpful to teh company on how to improve. 
+Using the results and insights from their own data, they can find trends to create a marketing strategy based off of girls and women who already use their device and app. This dataset is also relatively small with only 33 users, so the dataset is slightly biased and does not have a well-rounded number of observations.
+
+Supporting Visualizations and Key Findings
+
+```{r pressure, echo=FALSE}
+ggplot(daily_activity_and_sleep, aes(TotalSteps, TotalDistance)) +
+  geom_point(color = "pink") + 
+  xlab("Total Steps") + ylab("Total Distance") +
+  ggtitle("Relationship between Total Steps and Total Distance") + 
+  geom_smooth(method = lm)       
+```
+
+There is a positive relationship between total steps and total distance. This makes sense because if have a higher number of steps, your total distance is higher 
+
+```{r pressure2, echo=FALSE}
+ggplot(daily_activity_and_sleep, aes(TotalSteps, TotalDistance)) +
+  geom_point(color = "pink") + 
+  xlab("Total Steps") + ylab("Total Distance") +
+  ggtitle("Relationship between Total Steps and Total Distance") + 
+  geom_smooth(method = lm) + facet_wrap(~Id)
+```
+
+Between the different users, there is some variation of steps and distance but there is still a positive relationship between total steps and total distance. This makes sense because if have a higher number of steps, your total distance is higher 
+
+```{r pressure3, echo=FALSE}
+ggplot(daily_activity_and_sleep, aes(TotalSteps, SedentaryMinutes)) +
+  geom_point(color = "red") + 
+  xlab("Total Steps") + ylab("Sedentary Minutes") +
+  ggtitle("Relationship between the steps and sedentary minutes") + 
+  geom_smooth(method = lm)   
+```
+            
+There is a negative relationship between Total Steps and Sedentary Minutes. This makes sense because if you are sedentary, you are not walking at all. If a user walks more often, the total number of sedentary minutes is lower
+
+```{r pressure4, echo=FALSE}
+ggplot(daily_activity_and_sleep, aes(TotalSteps, Calories)) +
+  geom_point(color = "purple") + 
+  xlab("Total Steps") + ylab("Calories") + 
+  ggtitle("Does the number of steps taken affect the numbers of Calories burned?") +
+  geom_smooth(method = lm)
+```
+There is a positive relationship between the Total Steps and Calories. As Calories starts to increase so does the number of total steps
+
+```{r pressure5, echo=FALSE}
+ggplot(daily_activity_and_sleep, aes(TotalSteps, Calories)) +
+  geom_point(color = "purple") + 
+  xlab("Total Steps") + ylab("Calories") + 
+  ggtitle("Does the number of steps taken affect the numbers of Calories burned per ID?") +
+  geom_smooth(method = lm) + facet_wrap(~Id)
+```
+
+There is a positive relationship between the Total Steps and Calories. As Calories starts to increase so does the number of total steps. Some people walk more than others. Users who don't walk as much burn fewer Calories 
+
+```{r pressure6, echo=FALSE}
+ggplot(daily_activity_and_sleep, aes(TotalMinutesAsleep,TotalTimeInBed)) +
+  geom_point(color = "orange") + 
+  xlab("Total Minutes Asleep") + ylab("Total Time In Bed") + 
+  ggtitle("Relationship between Minutes Asleep and Minutes in Bed per ID") +
+  geom_smooth(method = lm) + facet_wrap(~Id)
+```
+
+Between the different users, there is some variation of Minutes Asleep and Minutes in Bed. There is a positive relationship between Minutes Asleep and Minutes in Bed. This makes sense, the higher number of minutes your in asleep, the number of minutes in bed should be higher too
+
+```{r pressure7, echo=FALSE}
+ggplot(steps_df, aes(avg_steps, number_of_entries, color=activity_level)) +
+  geom_point() + geom_line() +
+  ggtitle("How many times did users log their steps per Activity Level?") +
+  xlab("Average Steps") + ylab("Number of Entries in device") +
+  facet_wrap(~activity_level)
+```
+
+The very active users who had more than 10000 steps, logged in the device more than 20 times. The Light Active users who had less than 5000 steps, logged in the device less than 20 times.The higher the activity level,the higher the number of entries were
+
+```{r pressure8, echo=FALSE}
+ggplot(data = activity_level_percent, aes(x= activity_level, y = percent, fill = activity_level)) +
+  geom_bar(stat = "identity") + 
+  theme_bw() + 
+  ggtitle("Distibution of Users by Actvity Level") +
+  geom_text(aes(label = paste0(percent, "%"), y = 1.2 ), position = position_stack(vjust = 15))
+```
+
+This bar graph shows that most users had a moderate activity level. It is good to note that no user is considered sedentary!
+
+My high-level content recommendations based on my analysis
+Recommendations:
+  1. Adding daily notification for the number of steps completed per day will encourage users to complete their daily or to walk more especially if they are sedentary or lightly active.Adding daily sleep notifications(ie. time to go to bed) will encourage users to go to sleep and track their sleep to see if it improving or not. Adding notifications is a quick solution to reminding people track their steps and sleep. This will be espcially helpful to the 9 users who forgot to track their sleep.
+  2. Provide daily, weekly, monthly, quarterly and yearly summaries, so users can track their progress.
+  3. Create a rewards system, like the Starbucks Stars Rewards, to encourage users to track their walks and sleep by giving them badges whenever they complete certain milestones(ie walking 30 miles in a week or sleeping at least 6 hours every night for a week)
+
